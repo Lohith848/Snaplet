@@ -112,6 +112,6 @@ src/
 └── types.ts        # TypeScript interfaces
 ```
 
-## License
+## Made by
 
-MIT
+LOHITH G

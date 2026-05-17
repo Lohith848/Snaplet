@@ -112,6 +112,6 @@ src/
 └── types.ts        # TypeScript interfaces
 ```
 
-## Made by
+## Made by 
 
-LOHITH G
+LOHITH G 🌻

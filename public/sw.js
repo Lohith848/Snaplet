@@ -1,4 +1,4 @@
-const CACHE_NAME = 'snaplit-v1';
+const CACHE_NAME = 'snaplit-v2';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -24,6 +24,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
+            console.log('Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -33,31 +34,44 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event - network first, fall back to cache
+// Fetch event - network first for everything, cache as fallback
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
 
+  // Don't cache API requests or dynamic content
+  if (event.request.url.includes('/api/') || 
+      event.request.url.includes('supabase') ||
+      event.request.url.includes('.js') ||
+      event.request.url.includes('.css')) {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // For HTML and static assets, use cache-first strategy
   event.respondWith(
-    fetch(event.request)
+    caches.match(event.request)
       .then((response) => {
-        // Only cache successful responses
-        if (!response || response.status !== 200 || response.type === 'error') {
+        if (response) {
           return response;
         }
-
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+        return fetch(event.request).then((response) => {
+          if (!response || response.status !== 200 || response.type === 'error') {
+            return response;
+          }
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+          return response;
         });
-
-        return response;
       })
       .catch(() => {
-        // Fall back to cache if network fails
-        return caches.match(event.request).then((response) => {
-          return response || new Response('Offline', { status: 503 });
-        });
+        return new Response('Offline', { status: 503 });
       })
   );
 });
+

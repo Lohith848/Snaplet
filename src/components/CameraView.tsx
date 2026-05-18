@@ -50,14 +50,27 @@ export default function CameraView({ profile, takePhotoTrigger = 0, onTakePhoto 
       setCameraError(null);
       
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user', aspectRatio: 1, width: { ideal: 1280 }, height: { ideal: 1280 } }, 
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, 
         audio: false 
       });
       
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        
+        // Add error handler for video element
+        videoRef.current.onerror = () => {
+          console.error('Video element error');
+          setCameraError('Video playback error. Please refresh and try again.');
+          setCameraLoading(false);
+        };
+        
         videoRef.current.onloadedmetadata = () => {
+          console.log('Video metadata loaded, starting playback');
+          videoRef.current?.play().catch((err) => {
+            console.error('Play error:', err);
+            setCameraError('Could not start video. Please check camera permissions.');
+          });
           setCameraLoading(false);
         };
       } else {
@@ -68,13 +81,13 @@ export default function CameraView({ profile, takePhotoTrigger = 0, onTakePhoto 
       setCameraLoading(false);
       
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setCameraError('Camera permission denied. Please enable camera access in your browser settings and refresh the page.');
+        setCameraError('Camera permission denied. Please enable camera access in settings.');
       } else if (err.name === 'NotFoundError') {
         setCameraError('No camera found on this device.');
       } else if (err.name === 'NotReadableError' || err.name === 'ConstraintError') {
-        setCameraError('Camera is already in use or cannot be accessed. Try closing other apps using the camera.');
+        setCameraError('Camera is already in use. Close other apps using camera.');
       } else {
-        setCameraError('Unable to access camera. Please check your browser settings.');
+        setCameraError('Unable to access camera. ' + (err.message || 'Please check settings.'));
       }
     }
   };

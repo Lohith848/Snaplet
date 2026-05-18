@@ -3,20 +3,31 @@ import { UserProfile } from '../types';
 
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   try {
-    const { data, error } = await supabase
+    console.log('Fetching profile for user:', uid);
+    
+    // Add timeout for profile fetch - fail fast if user doesn't exist
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Profile fetch timeout')), 3000)
+    );
+
+    const fetchPromise = supabase
       .from('users')
       .select('*')
       .eq('id', uid)
       .single();
 
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
     if (error) {
-      if (error.code === 'PGRST116') {
-        // No rows returned
+      if (error.code === 'PGRST116' || error.message === 'Profile fetch timeout') {
+        // No rows returned or timeout - likely new user
+        console.log('Profile not found (new user):', uid);
         return null;
       }
       throw error;
     }
 
+    console.log('Profile found:', data.username);
     // Map database columns to TypeScript interface (snake_case to camelCase)
     return {
       uid: data.id,
@@ -41,19 +52,30 @@ export const checkUsernameUnique = async (username: string): Promise<boolean> =>
       return false; // Invalid username
     }
 
-    const { data, error } = await supabase
+    console.log('Checking username uniqueness for:', username);
+
+    // Add 3-second timeout for username check
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Username check timeout')), 3000)
+    );
+
+    const checkPromise = supabase
       .from('users')
       .select('id', { count: 'exact', head: true })
       .eq('username', username.toLowerCase());
 
+    const { data, error } = await Promise.race([checkPromise, timeoutPromise]) as any;
+
     if (error) {
       console.error('Error checking username:', error);
-      // On error, assume it's unique (better UX than blocking)
+      // On error or timeout, assume it's unique (better UX than blocking)
       return true;
     }
     
     // Returns true if NO usernames found (unique), false if found (taken)
-    return !data || data.length === 0;
+    const isUnique = !data || data.length === 0;
+    console.log('Username unique?', isUnique);
+    return isUnique;
   } catch (error) {
     console.error('Error checking username uniqueness:', error);
     // Return true on error (assume unique) - better UX
@@ -71,9 +93,9 @@ export const createUserProfile = async (profile: Partial<UserProfile>): Promise<
     
     console.log('Creating user profile for:', userId);
     
-    // Add timeout to prevent hanging
+    // Add timeout to prevent hanging - 5 seconds (faster)
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Profile creation timeout. Please check your connection and try again.')), 10000)
+      setTimeout(() => reject(new Error('Profile creation timeout. Please check your connection and try again.')), 5000)
     );
 
     const insertPromise = supabase

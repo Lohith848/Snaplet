@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, RefreshCcw, Send, Check, Plus, Smartphone } from 'lucide-react';
+import { Camera, Send, Check, Plus, Smartphone, Image, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { sendPhoto, subscribeToFeed, getFriends } from '../services/photoService';
 import { UserProfile, Photo } from '../types';
 import WidgetPreview from './WidgetPreview';
+import GalleryView from './GalleryView';
 import { cn } from '../lib/utils';
 
 interface Props {
@@ -21,6 +22,8 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
   const [askingWidgetPermission, setAskingWidgetPermission] = useState(false);
   const [latestPhotos, setLatestPhotos] = useState<Photo[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [showGallery, setShowGallery] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
     startCamera();
@@ -70,7 +73,6 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    // Check if video is playing/ready
     if (video.readyState < 2) {
       console.warn("Video not ready for capture");
       return;
@@ -79,7 +81,6 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
     const context = canvas.getContext('2d');
     if (!context) return;
     
-    // Square crop logic
     const videoWidth = video.videoWidth;
     const videoHeight = video.videoHeight;
     const size = Math.min(videoWidth, videoHeight);
@@ -87,10 +88,8 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
     canvas.width = size;
     canvas.height = size;
     
-    // Clear canvas
     context.clearRect(0, 0, size, size);
     
-    // Mirroring for capture (since video is mirrored in UI)
     context.save();
     context.translate(size, 0);
     context.scale(-1, 1);
@@ -118,13 +117,17 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
     if (!capturedImage || sending) return;
 
     setSending(true);
+    setSendError(null);
+    
     try {
-      // In a real app, we'd upload to Firebase Storage first.
-      // For this clone, we'll store the base64 or a placeholder if too large.
-      // Firebase Firestore has 1MB limit. Base64 of a 512x512 image is ~50-100KB.
-      
       const friends = await getFriends(profile.uid);
       const friendIds = friends.map(f => f.uid);
+      
+      if (friendIds.length === 0) {
+        setSendError('You have no friends yet. Add friends to share photos!');
+        setSending(false);
+        return;
+      }
       
       await sendPhoto(
         profile.uid,
@@ -134,8 +137,7 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
         friendIds
       );
       
-      // Simulate Widget Update Broadcast
-      console.log("Broadcasting to Home Screen Widgets...");
+      console.log("Photo sent successfully!");
       
       setSent(true);
       setTimeout(() => {
@@ -144,15 +146,19 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
         setSending(false);
         setAskingWidgetPermission(false);
       }, 1500);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Send failed:", error);
+      setSendError(error.message || 'Failed to send photo. Make sure you have friends and the database is set up.');
       setSending(false);
     }
   };
 
+  if (showGallery) {
+    return <GalleryView userId={profile.uid} onPhotoSelect={(photo) => setShowGallery(false)} />;
+  }
+
   return (
     <div className="relative h-full flex flex-col p-4">
-      {/* Widget Preview or Feed at Top */}
       <div className="h-1/3 flex items-center justify-center">
         {latestPhotos.length > 0 ? (
           <WidgetPreview photo={latestPhotos[0]} currentUserId={profile.uid} />
@@ -164,7 +170,6 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
         )}
       </div>
 
-      {/* Camera Preview */}
       <div className="flex-1 flex flex-col items-center justify-center py-8">
         <div className="relative w-full aspect-square max-w-sm rounded-[3rem] overflow-hidden bg-zinc-900 shadow-2xl border-2 border-zinc-800">
            {cameraError ? (
@@ -191,7 +196,6 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
            
            <canvas ref={canvasRef} className="hidden" />
 
-           {/* Widget Permission Overlay */}
            <AnimatePresence>
              {askingWidgetPermission && (
                <motion.div 
@@ -205,7 +209,7 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
                  </div>
                  <h3 className="text-xl font-display font-bold mb-2">Sync with Widget?</h3>
                  <p className="text-gray-300 text-sm mb-8">
-                   Allow Snaplit to update your friends' home screen widgets with this photo.
+                   Allow Snaplit to update your friends' home screen widgets with this photo. Available on iOS and Android.
                  </p>
                  <div className="w-full flex flex-col gap-3">
                    <button 
@@ -228,72 +232,111 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
              )}
            </AnimatePresence>
 
-           {/* Send Overlay */}
            <AnimatePresence>
-              {capturedImage && !sent && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 20 }}
-                  className="absolute bottom-6 left-0 right-0 px-6 flex justify-between gap-4"
-                >
-                  <button 
-                    onClick={() => setCapturedImage(null)}
-                    disabled={sending}
-                    className="flex-1 bg-zinc-900/80 backdrop-blur-md text-white py-4 rounded-2xl font-bold border border-white/10"
-                  >
-                    Discard
-                  </button>
-                  <button 
-                    onClick={handleSend}
-                    disabled={sending}
-                    className="flex-[2] bg-yellow-500 text-black py-4 rounded-2xl font-bold flex items-center justify-center gap-2"
-                  >
-                    {sending ? (
-                      <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <Send size={20} />
-                        Send to Friends
-                      </>
-                    )}
-                  </button>
-                </motion.div>
-              )}
+             {sendError && (
+               <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="absolute bottom-6 left-0 right-0 px-6"
+               >
+                 <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex gap-3">
+                   <AlertCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+                   <div>
+                     <p className="text-red-500 text-sm font-medium">{sendError}</p>
+                   </div>
+                   <button
+                     onClick={() => setSendError(null)}
+                     className="text-red-500 ml-auto text-sm font-medium hover:text-red-400"
+                   >
+                     Dismiss
+                   </button>
+                 </div>
+               </motion.div>
+             )}
            </AnimatePresence>
 
-           {/* Sent Success Overlay */}
            <AnimatePresence>
-              {sent && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 1.5 }}
-                  className="absolute inset-0 bg-yellow-500/90 flex flex-col items-center justify-center z-20"
-                >
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1, rotate: [0, -10, 10, 0] }}
-                    className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-4"
-                  >
-                    <Check size={48} className="text-yellow-500" strokeWidth={4} />
-                  </motion.div>
-                  <h3 className="text-black text-2xl font-display font-bold">Sent!</h3>
-                </motion.div>
-              )}
+             {capturedImage && !sent && (
+               <motion.div 
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 exit={{ opacity: 0, y: 20 }}
+                 className="absolute bottom-6 left-0 right-0 px-6 flex justify-between gap-4"
+               >
+                 <button 
+                   onClick={() => {
+                     setCapturedImage(null);
+                     setSendError(null);
+                   }}
+                   disabled={sending}
+                   className="flex-1 bg-zinc-900/80 backdrop-blur-md text-white py-4 rounded-2xl font-bold border border-white/10"
+                 >
+                   Discard
+                 </button>
+                 <button 
+                   onClick={handleSend}
+                   disabled={sending}
+                   className="flex-[2] bg-yellow-500 text-black py-4 rounded-2xl font-bold flex items-center justify-center gap-2"
+                 >
+                   {sending ? (
+                     <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                   ) : (
+                     <>
+                       <Send size={20} />
+                       Send to Friends
+                     </>
+                   )}
+                 </button>
+               </motion.div>
+             )}
+           </AnimatePresence>
+
+           <AnimatePresence>
+             {sent && (
+               <motion.div 
+                 initial={{ opacity: 0, scale: 0.5 }}
+                 animate={{ opacity: 1, scale: 1 }}
+                 exit={{ opacity: 0, scale: 1.5 }}
+                 className="absolute inset-0 bg-yellow-500/90 flex flex-col items-center justify-center z-20"
+               >
+                 <motion.div
+                   initial={{ scale: 0 }}
+                   animate={{ scale: 1, rotate: [0, -10, 10, 0] }}
+                   className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-4"
+                 >
+                   <Check size={48} className="text-yellow-500" strokeWidth={4} />
+                 </motion.div>
+                 <h3 className="text-black text-2xl font-display font-bold">Sent!</h3>
+               </motion.div>
+             )}
            </AnimatePresence>
         </div>
       </div>
 
-      {/* Shutter Button */}
       {!capturedImage && !cameraError && (
-        <div className="mt-8 flex justify-center pb-24">
-           <button 
+        <div className="mt-8 flex justify-between items-center pb-24 px-4">
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowGallery(true)}
+            className="w-16 h-16 rounded-full bg-zinc-900 border-2 border-zinc-800 flex items-center justify-center hover:border-yellow-500 transition-colors"
+          >
+            <Image size={24} className="text-yellow-500" />
+          </motion.button>
+
+          <motion.button 
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={takePhoto}
-            className="w-24 h-24 rounded-full border-4 border-yellow-500 p-2 group transition-all transform active:scale-95"
-           >
-             <div className="w-full h-full rounded-full bg-yellow-500 group-hover:scale-90 transition-transform" />
-           </button>
+            className="w-20 h-20 rounded-full bg-yellow-500 shadow-lg shadow-yellow-500/50 flex items-center justify-center active:shadow-yellow-500/30 transition-all"
+          >
+            <div className="w-16 h-16 rounded-full bg-yellow-400 flex items-center justify-center">
+              <Camera size={28} className="text-black" />
+            </div>
+          </motion.button>
+
+          <div className="w-16 h-16" />
         </div>
       )}
     </div>

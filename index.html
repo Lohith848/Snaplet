@@ -25,7 +25,8 @@
               console.log('Service Worker registered:', registration);
             })
             .catch((error) => {
-              console.error('Service Worker registration failed:', error);
+              console.warn('Service Worker registration failed (this is okay):', error);
+              // It's okay if service worker fails - app still works
             });
         });
       }

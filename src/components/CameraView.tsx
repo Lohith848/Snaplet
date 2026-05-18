@@ -1,18 +1,17 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, Send, Check, Plus, Smartphone, Image, AlertCircle } from 'lucide-react';
+import { Camera, Send, Check, Plus, Smartphone, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { sendPhoto, subscribeToFeed, getFriends } from '../services/photoService';
 import { UserProfile, Photo } from '../types';
 import WidgetPreview from './WidgetPreview';
-import GalleryView from './GalleryView';
-import { cn } from '../lib/utils';
 
 interface Props {
   profile: UserProfile;
   takePhotoTrigger?: number;
+  onTakePhoto?: () => void;
 }
 
-export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
+export default function CameraView({ profile, takePhotoTrigger = 0, onTakePhoto }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -22,7 +21,6 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
   const [askingWidgetPermission, setAskingWidgetPermission] = useState(false);
   const [latestPhotos, setLatestPhotos] = useState<Photo[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [showGallery, setShowGallery] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [cameraLoading, setCameraLoading] = useState(true);
 
@@ -69,7 +67,6 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
       console.error("Camera error:", err);
       setCameraLoading(false);
       
-      // Provide user-friendly error messages
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setCameraError('Camera permission denied. Please enable camera access in your browser settings and refresh the page.');
       } else if (err.name === 'NotFoundError') {
@@ -131,6 +128,7 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     setCapturedImage(dataUrl);
     setAskingWidgetPermission(true);
+    onTakePhoto?.();
   };
 
   const handleSend = async () => {
@@ -173,12 +171,8 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
     }
   };
 
-  if (showGallery) {
-    return <GalleryView userId={profile.uid} onPhotoSelect={(photo) => setShowGallery(false)} />;
-  }
-
   return (
-    <div className="relative h-full flex flex-col p-4">
+    <div className="relative h-full flex flex-col p-4 pb-32">
       <div className="h-1/3 flex items-center justify-center">
         {latestPhotos.length > 0 ? (
           <WidgetPreview photo={latestPhotos[0]} currentUserId={profile.uid} />
@@ -348,32 +342,6 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
            </AnimatePresence>
         </div>
       </div>
-
-      {!capturedImage && !cameraError && (
-        <div className="mt-8 flex justify-between items-center pb-24 px-4">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowGallery(true)}
-            className="w-16 h-16 rounded-full bg-zinc-900 border-2 border-zinc-800 flex items-center justify-center hover:border-yellow-500 transition-colors"
-          >
-            <Image size={24} className="text-yellow-500" />
-          </motion.button>
-
-          <motion.button 
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={takePhoto}
-            className="w-20 h-20 rounded-full bg-yellow-500 shadow-lg shadow-yellow-500/50 flex items-center justify-center active:shadow-yellow-500/30 transition-all"
-          >
-            <div className="w-16 h-16 rounded-full bg-yellow-400 flex items-center justify-center">
-              <Camera size={28} className="text-black" />
-            </div>
-          </motion.button>
-
-          <div className="w-16 h-16" />
-        </div>
-      )}
     </div>
   );
 }

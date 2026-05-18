@@ -14,11 +14,25 @@ const EMOJIS = ['❤️', '😂', '😮', '🔥', '👍', '😢'];
 
 export default function WidgetPreview({ photo, currentUserId }: Props) {
   const [showReactions, setShowReactions] = useState(false);
-  const userReaction = photo.reactions?.[currentUserId];
+  const [reactions, setReactions] = useState(photo.reactions || {});
+  const userReaction = reactions?.[currentUserId];
 
-  const handleReact = (emoji: string) => {
-    reactToPhoto(photo.id, currentUserId, emoji);
+  const handleReact = async (emoji: string) => {
+    // Update local state immediately for instant feedback
+    setReactions(prev => ({
+      ...prev,
+      [currentUserId]: emoji
+    }));
     setShowReactions(false);
+    
+    // Then update in database
+    try {
+      await reactToPhoto(photo.id, currentUserId, emoji);
+    } catch (error) {
+      console.error('Failed to save reaction:', error);
+      // Revert on error
+      setReactions(photo.reactions || {});
+    }
   };
 
   return (
@@ -77,11 +91,16 @@ export default function WidgetPreview({ photo, currentUserId }: Props) {
 
       {/* All Reactions Indicators */}
       <div className="absolute bottom-2 left-2 flex -space-x-1">
-        {Object.entries(photo.reactions || {}).slice(0, 3).map(([uid, emoji]) => (
+        {Object.entries(reactions || {}).slice(0, 3).map(([uid, emoji]) => (
           <div key={uid} className="w-5 h-5 rounded-full bg-zinc-900 border border-black flex items-center justify-center text-[10px]">
             {emoji}
           </div>
         ))}
+        {Object.keys(reactions || {}).length > 3 && (
+          <div className="w-5 h-5 rounded-full bg-zinc-800 border border-black flex items-center justify-center text-[8px] text-gray-400">
+            +{Object.keys(reactions).length - 3}
+          </div>
+        )}
       </div>
     </motion.div>
   );

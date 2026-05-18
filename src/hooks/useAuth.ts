@@ -24,17 +24,21 @@ export function useAuth() {
 
     const initAuth = async () => {
       try {
-        // Check current session with timeout
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Session check timeout')), 5000)
-        );
-
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        console.log('Checking current session...');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (!isMounted) return;
 
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+
         if (session?.user) {
+          console.log('Session found, loading profile for user:', session.user.id);
           setUser({
             id: session.user.id,
             email: session.user.email,
@@ -42,6 +46,7 @@ export function useAuth() {
           });
           await loadProfile(session.user.id);
         } else {
+          console.log('No session found');
           setUser(null);
           setProfile(null);
           setLoading(false);
@@ -49,7 +54,7 @@ export function useAuth() {
       } catch (err) {
         console.error('Auth initialization error:', err);
         if (isMounted) {
-          setError('Failed to load auth. Try refreshing the page.');
+          // Even on error, stop loading - don't block the UI
           setLoading(false);
         }
       }
@@ -60,6 +65,8 @@ export function useAuth() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
+
+      console.log('Auth state changed:', event, session?.user?.id);
 
       if (session?.user) {
         setUser({
@@ -84,16 +91,20 @@ export function useAuth() {
 
   const loadProfile = async (userId: string) => {
     try {
+      console.log('Loading profile for user:', userId);
       const userProfile = await getUserProfile(userId);
       if (userProfile) {
+        console.log('Profile loaded successfully');
         setProfile(userProfile);
-        setLoading(false);
       } else {
-        setLoading(false);
+        console.log('No profile found for user');
+        setProfile(null);
       }
     } catch (error) {
       console.error('Failed to load profile:', error);
       setProfile(null);
+      // Don't set error here - profile might not exist yet (new user in onboarding)
+    } finally {
       setLoading(false);
     }
   };

@@ -53,6 +53,56 @@ CREATE INDEX idx_photos_created_at ON photos(created_at DESC);
 CREATE INDEX idx_friendships_user_id ON friendships(user_id);
 ```
 
+### Step 1b: Create Row Level Security (RLS) Policies ⚠️ IMPORTANT
+
+**If you get error "new row violates row-level security policy", follow these steps:**
+
+1. Click **New Query** again in SQL Editor
+2. Paste this SQL and click **Run**:
+
+```sql
+-- Enable RLS on tables
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE photos ENABLE ROW LEVEL SECURITY;
+
+-- Users table policies
+CREATE POLICY "Users can insert their own profile"
+  ON users FOR INSERT WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can read all profiles"
+  ON users FOR SELECT USING (true);
+
+CREATE POLICY "Users can update their own profile"
+  ON users FOR UPDATE USING (auth.uid() = id);
+
+-- Friendships table policies
+CREATE POLICY "Users can read their own friendships"
+  ON friendships FOR SELECT
+  USING (auth.uid() = user_id OR auth.uid() = friend_id);
+
+CREATE POLICY "Users can create friendships"
+  ON friendships FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update friendships"
+  ON friendships FOR UPDATE
+  USING (auth.uid() = user_id OR auth.uid() = friend_id);
+
+-- Photos table policies
+CREATE POLICY "Users can insert their own photos"
+  ON photos FOR INSERT WITH CHECK (auth.uid() = sender_id);
+
+CREATE POLICY "Users can read photos they sent or received"
+  ON photos FOR SELECT
+  USING (auth.uid() = sender_id OR auth.uid() = ANY(recipient_ids));
+
+CREATE POLICY "Users can update their own photos"
+  ON photos FOR UPDATE USING (auth.uid() = sender_id);
+
+CREATE POLICY "Users can delete their own photos"
+  ON photos FOR DELETE USING (auth.uid() = sender_id);
+```
+
 ### Step 2: Enable Email OTP Authentication
 
 1. Go to **Authentication** → **Providers** (left sidebar)
@@ -105,8 +155,13 @@ If not, manually redeploy:
 
 ## Troubleshooting
 
-**"Username already taken" appears for every username?**
+**"new row violates row-level security policy" error?**
+- You skipped Step 1b (RLS Policies)
+- Run the RLS SQL from Step 1b above
+
+**"Username already taken" for every username?**
 - Make sure the `users` table was created (check Supabase SQL Editor → Tables)
+- Make sure RLS policies are set (check Authentication → Policies)
 
 **Still seeing black screen?**
 - Open DevTools (F12) → Console tab

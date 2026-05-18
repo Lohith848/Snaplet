@@ -49,30 +49,39 @@ export default function CameraView({ profile, takePhotoTrigger = 0, onTakePhoto 
       setCameraLoading(true);
       setCameraError(null);
       
+      console.log('Requesting camera access...');
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, 
         audio: false 
       });
       
+      console.log('Camera stream obtained:', mediaStream.getTracks().length, 'tracks');
       setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        console.log('Media stream set, waiting for metadata');
-        
-        const metadataTimeout = setTimeout(() => {
-          console.log('Metadata timeout - assuming video ready');
-          setCameraLoading(false);
-        }, 4000);
-        
-        videoRef.current.onloadedmetadata = () => {
-          clearTimeout(metadataTimeout);
-          console.log('Video metadata loaded, camera ready');
-          setCameraLoading(false);
-        };
-      } else {
+      
+      if (!videoRef.current) {
         console.error('Video ref not available');
         setCameraLoading(false);
+        setCameraError('Video element not initialized');
+        return;
       }
+      
+      console.log('Setting video source object...');
+      videoRef.current.srcObject = mediaStream;
+      
+      // Wait for video to have dimensions
+      let readyAttempts = 0;
+      const checkVideoReady = setInterval(() => {
+        readyAttempts++;
+        if (videoRef.current && videoRef.current.videoWidth > 0) {
+          console.log('Video has dimensions:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
+          clearInterval(checkVideoReady);
+          setCameraLoading(false);
+        } else if (readyAttempts > 20) {
+          console.warn('Video ready check timeout after', readyAttempts * 200, 'ms');
+          clearInterval(checkVideoReady);
+          setCameraLoading(false);
+        }
+      }, 200);
     } catch (err: any) {
       console.error("Camera error:", err);
       setCameraLoading(false);
@@ -100,8 +109,16 @@ export default function CameraView({ profile, takePhotoTrigger = 0, onTakePhoto 
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
+    // Retry up to 10 times if video not ready
     if (video.readyState < 2) {
-      console.warn("Video not ready for capture");
+      console.warn("Video not ready for capture, retrying...", "readyState:", video.readyState);
+      setTimeout(takePhoto, 100);
+      return;
+    }
+
+    if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+      console.warn("Video dimensions not available yet");
+      setTimeout(takePhoto, 100);
       return;
     }
 
@@ -111,6 +128,8 @@ export default function CameraView({ profile, takePhotoTrigger = 0, onTakePhoto 
     const videoWidth = video.videoWidth;
     const videoHeight = video.videoHeight;
     const size = Math.min(videoWidth, videoHeight);
+    
+    console.log('Taking photo - video dimensions:', videoWidth, 'x', videoHeight, 'canvas size:', size);
     
     canvas.width = size;
     canvas.height = size;

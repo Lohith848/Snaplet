@@ -20,7 +20,8 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          // Add cache busting to service worker to force refresh
+          navigator.serviceWorker.register('/sw.js?v=' + Date.now())
             .then((registration) => {
               console.log('Service Worker registered:', registration);
             })

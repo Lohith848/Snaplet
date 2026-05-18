@@ -1,4 +1,4 @@
-const CACHE_NAME = 'snaplit-v2';
+const CACHE_NAME = 'snaplit-v3';
 const urlsToCache = [
   '/',
   '/index.html',

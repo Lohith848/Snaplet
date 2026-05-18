@@ -46,12 +46,14 @@ export default function App() {
     setUsernameError('');
 
     try {
+      console.log('Starting onboarding for username:', username);
       console.log('Checking if username is unique:', username);
       const isUnique = await checkUsernameUnique(username);
+      console.log('Username check result - isUnique:', isUnique);
       
       if (!isUnique) {
         console.log('Username already taken:', username);
-        setUsernameError('Username already taken');
+        setUsernameError('Username already taken. Try another one.');
         setCheckingUsername(false);
         return;
       }
@@ -65,7 +67,7 @@ export default function App() {
       };
 
       await createUserProfile(newProfile);
-      console.log('Profile created, updating local state');
+      console.log('Profile created successfully, updating local state');
       setProfile(newProfile as any);
       setCheckingUsername(false);
     } catch (error: any) {

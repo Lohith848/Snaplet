@@ -49,36 +49,36 @@ export const checkUsernameUnique = async (username: string): Promise<boolean> =>
   try {
     // Validate username format
     if (!username || username.length < 3) {
+      console.log('Username too short:', username);
       return false; // Invalid username
     }
 
-    console.log('Checking username uniqueness for:', username);
+    const lowerUsername = username.toLowerCase();
+    console.log('Checking username uniqueness for:', lowerUsername);
 
-    // Add 3-second timeout for username check
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Username check timeout')), 3000)
-    );
-
-    const checkPromise = supabase
+    // Simple query without timeout - let it complete
+    const { data, error, status } = await supabase
       .from('users')
-      .select('id', { count: 'exact', head: true })
-      .eq('username', username.toLowerCase());
+      .select('id')
+      .eq('username', lowerUsername);
 
-    const { data, error } = await Promise.race([checkPromise, timeoutPromise]) as any;
+    console.log('Query response:', { status, data, error });
 
     if (error) {
-      console.error('Error checking username:', error);
-      // On error or timeout, assume it's unique (better UX than blocking)
+      console.error('Error checking username:', error.message, error.code);
+      // On error (likely RLS), assume it's unique - let create handle it
+      // If username exists, create will fail with duplicate error
+      console.log('Assuming username is unique due to error');
       return true;
     }
     
-    // Returns true if NO usernames found (unique), false if found (taken)
+    // If data is null or empty array, username is unique
     const isUnique = !data || data.length === 0;
-    console.log('Username unique?', isUnique);
+    console.log('Username unique?', isUnique, 'Data:', data);
     return isUnique;
-  } catch (error) {
-    console.error('Error checking username uniqueness:', error);
-    // Return true on error (assume unique) - better UX
+  } catch (error: any) {
+    console.error('Error checking username uniqueness:', error.message);
+    // Return true on error - let profile creation handle the duplicate error
     return true;
   }
 };

@@ -24,6 +24,7 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [showGallery, setShowGallery] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [cameraLoading, setCameraLoading] = useState(true);
 
   useEffect(() => {
     startCamera();
@@ -47,18 +48,37 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
 
   const startCamera = async () => {
     try {
+      setCameraLoading(true);
+      setCameraError(null);
+      
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user', aspectRatio: 1 }, 
+        video: { facingMode: 'user', aspectRatio: 1, width: { ideal: 1280 }, height: { ideal: 1280 } }, 
         audio: false 
       });
+      
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        videoRef.current.onloadedmetadata = () => {
+          setCameraLoading(false);
+        };
+      } else {
+        setCameraLoading(false);
       }
-      setCameraError(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Camera error:", err);
-      setCameraError("Camera access denied. Please enable it in settings.");
+      setCameraLoading(false);
+      
+      // Provide user-friendly error messages
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraError('Camera permission denied. Please enable camera access in your browser settings and refresh the page.');
+      } else if (err.name === 'NotFoundError') {
+        setCameraError('No camera found on this device.');
+      } else if (err.name === 'NotReadableError' || err.name === 'ConstraintError') {
+        setCameraError('Camera is already in use or cannot be accessed. Try closing other apps using the camera.');
+      } else {
+        setCameraError('Unable to access camera. Please check your browser settings.');
+      }
     }
   };
 
@@ -172,10 +192,24 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
 
       <div className="flex-1 flex flex-col items-center justify-center py-8">
         <div className="relative w-full aspect-square max-w-sm rounded-[3rem] overflow-hidden bg-zinc-900 shadow-2xl border-2 border-zinc-800">
-           {cameraError ? (
-             <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
-               <Camera size={48} className="text-zinc-700 mb-4" />
-               <p className="text-zinc-500">{cameraError}</p>
+           {cameraLoading ? (
+             <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-black">
+               <div className="w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+               <p className="text-gray-400">Requesting camera access...</p>
+             </div>
+           ) : cameraError ? (
+             <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-black overflow-y-auto">
+               <Camera size={48} className="text-red-500 mb-4 flex-shrink-0" />
+               <p className="text-red-500 font-semibold mb-4">{cameraError}</p>
+               <button
+                 onClick={() => {
+                   setCameraError(null);
+                   startCamera();
+                 }}
+                 className="bg-yellow-500 text-black font-bold px-6 py-2 rounded-xl text-sm"
+               >
+                 Try Again
+               </button>
              </div>
            ) : capturedImage ? (
              <motion.img 
@@ -190,6 +224,7 @@ export default function CameraView({ profile, takePhotoTrigger = 0 }: Props) {
               ref={videoRef} 
               autoPlay 
               playsInline 
+              muted
               className="w-full h-full object-cover scale-x-[-1]" 
              />
            )}

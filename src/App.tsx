@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Camera, History, Users, Settings, Plus, X, Smartphone } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';

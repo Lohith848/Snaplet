@@ -1,21 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Search, UserPlus, ArrowLeft, Check, UserMinus, Users, ArrowRight } from 'lucide-react';
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  onSnapshot, 
-  limit,
-  serverTimestamp 
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { UserProfile, Friendship } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import ContactSync from './ContactSync';
 
 interface Props {
@@ -30,73 +17,132 @@ export default function FriendsView({ profile, onBack }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const path = `users/${profile.uid}/friends`;
-    const unsub = onSnapshot(collection(db, 'users', profile.uid, 'friends'), (snap) => {
-      setFriends(snap.docs.map(doc => doc.data() as Friendship));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, path);
-    });
-    return () => unsub();
+    loadFriends();
   }, [profile.uid]);
+
+  const loadFriends = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('friendships')
+        .select('friend_id')
+        .eq('user_id', profile.uid)
+        .eq('status', 'accepted');
+
+      if (error) throw error;
+
+      const friendIds = data?.map(f => f.friend_id) || [];
+      
+      if (friendIds.length === 0) {
+        setFriends([]);
+        return;
+      }
+
+      const { data: friendsData, error: friendsError } = await supabase
+        .from('users')
+        .select('*')
+        .in('id', friendIds);
+
+      if (friendsError) throw friendsError;
+
+      setFriends((friendsData || []).map(user => ({
+        uid: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        photoURL: user.photo_url,
+        status: 'accepted' as const,
+        updatedAt: user.updated_at,
+      })));
+    } catch (error) {
+      console.error('Error loading friends:', error);
+    }
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!search) return;
     
     setLoading(true);
-    const path = 'users';
     try {
-      const q = query(collection(db, path), where('username', '==', search.toLowerCase()), limit(20));
-      const snap = await getDocs(q);
-      setResults(snap.docs.map(doc => doc.data() as UserProfile).filter(u => u.uid !== profile.uid));
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', search.toLowerCase())
+        .limit(20);
+
+      if (error) throw error;
+
+      setResults((data || [])
+        .filter(u => u.id !== profile.uid)
+        .map(u => ({
+          uid: u.id,
+          username: u.username,
+          displayName: u.display_name,
+          photoURL: u.photo_url,
+          createdAt: u.created_at,
+          updatedAt: u.updated_at,
+        })));
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, path);
+      console.error('Error searching users:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const addFriend = async (friend: UserProfile) => {
-    const myPath = `users/${profile.uid}/friends/${friend.uid}`;
-    const theirPath = `users/${friend.uid}/friends/${profile.uid}`;
-    
-    const myFriendRef = doc(db, 'users', profile.uid, 'friends', friend.uid);
-    const theirFriendRef = doc(db, 'users', friend.uid, 'friends', profile.uid);
-
-    const friendshipData = {
-      uid: friend.uid,
-      username: friend.username,
-      displayName: friend.displayName,
-      photoURL: friend.photoURL,
-      status: 'accepted',
-      updatedAt: serverTimestamp()
-    };
-
-    const myDataForThem = {
-      uid: profile.uid,
-      username: profile.username,
-      displayName: profile.displayName,
-      photoURL: profile.photoURL,
-      status: 'accepted',
-      updatedAt: serverTimestamp()
-    };
-
     try {
-      await setDoc(myFriendRef, friendshipData);
-      await setDoc(theirFriendRef, myDataForThem);
+      // Add friendship from my side
+      const { error: error1 } = await supabase
+        .from('friendships')
+        .insert({
+          user_id: profile.uid,
+          friend_id: friend.uid,
+          status: 'accepted',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error1) throw error1;
+
+      // Add friendship from their side
+      const { error: error2 } = await supabase
+        .from('friendships')
+        .insert({
+          user_id: friend.uid,
+          friend_id: profile.uid,
+          status: 'accepted',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error2) throw error2;
+
       setResults([]);
       setSearch('');
+      await loadFriends();
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, myPath);
+      console.error('Error adding friend:', error);
     }
   };
 
   const removeFriend = async (friendId: string) => {
     try {
-      await deleteDoc(doc(db, 'users', profile.uid, 'friends', friendId));
-      await deleteDoc(doc(db, 'users', friendId, 'friends', profile.uid));
+      // Remove friendship from my side
+      await supabase
+        .from('friendships')
+        .delete()
+        .eq('user_id', profile.uid)
+        .eq('friend_id', friendId);
+
+      // Remove friendship from their side
+      await supabase
+        .from('friendships')
+        .delete()
+        .eq('user_id', friendId)
+        .eq('friend_id', profile.uid);
+
+      await loadFriends();
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${profile.uid}/friends/${friendId}`);
+      console.error('Error removing friend:', error);
     }
   };
 

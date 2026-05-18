@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Camera, History, Users, Settings, Plus, X, Smartphone } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
-import { signInWithPopup, googleProvider, auth } from './lib/firebase';
+import { supabase } from './lib/supabase';
 import { createUserProfile, checkUsernameUnique } from './services/userService';
 import CameraView from './components/CameraView';
 import HistoryView from './components/HistoryView';
 import FriendsView from './components/FriendsView';
 import ContactSync from './components/ContactSync';
+import LoginView from './components/LoginView';
 import WidgetSetup from './components/WidgetSetup';
 import { updateProfile } from './services/userService';
 import { cn } from './lib/utils';
@@ -25,7 +26,13 @@ export default function App() {
 
   const handleLogin = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (error) throw error;
     } catch (error) {
       console.error('Login failed', error);
     }
@@ -46,10 +53,10 @@ export default function App() {
     }
 
     const newProfile = {
-      uid: user.uid,
+      uid: user.id,
       username: username.toLowerCase(),
-      displayName: user.displayName || username,
-      photoURL: user.photoURL || '',
+      displayName: user.user_metadata?.name || username,
+      photoURL: user.user_metadata?.avatar_url || '',
     };
 
     await createUserProfile(newProfile);
@@ -72,28 +79,9 @@ export default function App() {
   }
 
   if (!user) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-black text-white p-6">
-        <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="w-24 h-24 bg-yellow-500 rounded-3xl flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(255,184,0,0.3)]"
-        >
-          <Camera size={48} className="text-black" strokeWidth={2.5} />
-        </motion.div>
-        <h1 className="text-4xl font-display font-bold mb-4 tracking-tight">Snaplit</h1>
-        <p className="text-gray-400 text-center mb-12 max-w-xs">
-          Live photos from your best friends, right on your Home Screen.
-        </p>
-        <button 
-          onClick={handleLogin}
-          className="w-full max-w-sm bg-white text-black font-semibold py-4 rounded-2xl hover:bg-gray-100 transition-colors flex items-center justify-center gap-3"
-        >
-          <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-          Continue with Google
-        </button>
-      </div>
-    );
+    return <LoginView onLoginSuccess={() => {
+      // This triggers a re-render through useAuth hook when session changes
+    }} />;
   }
 
   if (user && !profile) {
@@ -190,8 +178,8 @@ export default function App() {
                    </button>
 
                    <button 
-                    onClick={() => {
-                      auth.signOut();
+                    onClick={async () => {
+                      await supabase.auth.signOut();
                       window.location.reload();
                     }}
                     className="w-full bg-zinc-900 text-red-500 py-4 rounded-2xl font-bold"

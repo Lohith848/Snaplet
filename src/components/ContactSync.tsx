@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, Info, ArrowRight, Check, Share2, MessageSquare, MessageCircle } from 'lucide-react';
-import { auth } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 
 interface Contact {
   name: string;
@@ -12,8 +12,15 @@ export default function ContactSync({ onComplete }: { onComplete: () => void }) 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const inviteLink = `https://snaplet.app/join/${auth.currentUser?.uid}`;
+  React.useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id || null);
+    });
+  }, []);
+
+  const inviteLink = userId ? `https://snaplit.app/join/${userId}` : 'https://snaplit.app';
 
   const shareViaSms = () => {
     const text = encodeURIComponent(`Add me on Snaplit! I want to see your live photos on my home screen: ${inviteLink}`);

@@ -69,7 +69,14 @@ export const createUserProfile = async (profile: Partial<UserProfile>): Promise<
   try {
     const userId = profile.uid;
     
-    const { error } = await supabase
+    console.log('Creating user profile for:', userId);
+    
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Profile creation timeout. Please check your connection and try again.')), 10000)
+    );
+
+    const insertPromise = supabase
       .from('users')
       .insert({
         id: userId,
@@ -82,7 +89,14 @@ export const createUserProfile = async (profile: Partial<UserProfile>): Promise<
         updated_at: new Date().toISOString(),
       });
 
-    if (error) throw error;
+    const { error } = await Promise.race([insertPromise, timeoutPromise]) as any;
+
+    if (error) {
+      console.error('Supabase insert error:', error);
+      throw error;
+    }
+    
+    console.log('Profile created successfully');
   } catch (error) {
     console.error('Error creating user profile:', error);
     throw error;

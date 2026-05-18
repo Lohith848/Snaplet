@@ -46,13 +46,17 @@ export default function App() {
     setUsernameError('');
 
     try {
+      console.log('Checking if username is unique:', username);
       const isUnique = await checkUsernameUnique(username);
+      
       if (!isUnique) {
+        console.log('Username already taken:', username);
         setUsernameError('Username already taken');
         setCheckingUsername(false);
         return;
       }
 
+      console.log('Username is unique, creating profile...');
       const newProfile = {
         uid: user.id,
         username: username.toLowerCase(),
@@ -61,13 +65,23 @@ export default function App() {
       };
 
       await createUserProfile(newProfile);
+      console.log('Profile created, updating local state');
       setProfile(newProfile as any);
       setCheckingUsername(false);
     } catch (error: any) {
-      const message = error?.message || 'Failed to create profile. Make sure Supabase tables are set up.';
+      console.error('Onboarding error:', error);
+      
+      // Check if it's an RLS error
+      let message = error?.message || 'Failed to create profile';
+      
+      if (message.includes('row-level security') || message.includes('RLS')) {
+        message = 'Database permission error. Please contact support or refresh and try again.';
+      } else if (message.includes('duplicate') || message.includes('unique')) {
+        message = 'Username already taken. Try another one.';
+      }
+      
       setUsernameError(message);
       setCheckingUsername(false);
-      console.error('Onboarding error:', error);
     }
   };
 

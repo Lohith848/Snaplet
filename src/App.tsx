@@ -45,23 +45,30 @@ export default function App() {
     setCheckingUsername(true);
     setUsernameError('');
 
-    const isUnique = await checkUsernameUnique(username);
-    if (!isUnique) {
-      setUsernameError('Username already taken');
+    try {
+      const isUnique = await checkUsernameUnique(username);
+      if (!isUnique) {
+        setUsernameError('Username already taken');
+        setCheckingUsername(false);
+        return;
+      }
+
+      const newProfile = {
+        uid: user.id,
+        username: username.toLowerCase(),
+        displayName: user.user_metadata?.name || username,
+        photoURL: user.user_metadata?.avatar_url || '',
+      };
+
+      await createUserProfile(newProfile);
+      setProfile(newProfile as any);
       setCheckingUsername(false);
-      return;
+    } catch (error: any) {
+      const message = error?.message || 'Failed to create profile. Make sure Supabase tables are set up.';
+      setUsernameError(message);
+      setCheckingUsername(false);
+      console.error('Onboarding error:', error);
     }
-
-    const newProfile = {
-      uid: user.id,
-      username: username.toLowerCase(),
-      displayName: user.user_metadata?.name || username,
-      photoURL: user.user_metadata?.avatar_url || '',
-    };
-
-    await createUserProfile(newProfile);
-    setProfile(newProfile as any);
-    setCheckingUsername(false);
   };
 
   const handleContactSyncComplete = async () => {

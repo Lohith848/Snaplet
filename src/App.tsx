@@ -82,9 +82,9 @@ export default function App() {
         photoURL: user.user_metadata?.avatar_url || '',
       };
 
-      await createUserProfile(newProfile);
+      const createdProfile = await createUserProfile(newProfile);
       console.log('Profile created successfully, updating local state');
-      setProfile(newProfile as any);
+      setProfile(createdProfile);
       setCheckingUsername(false);
     } catch (error: any) {
       console.error('Onboarding error:', error);

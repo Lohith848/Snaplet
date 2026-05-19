@@ -90,7 +90,7 @@ export const checkUsernameUnique = async (username: string): Promise<boolean> =>
   }
 };
 
-export const createUserProfile = async (profile: Partial<UserProfile>): Promise<void> => {
+export const createUserProfile = async (profile: Partial<UserProfile>): Promise<UserProfile> => {
   if (!profile.uid) {
     throw new Error('UID is required');
   }
@@ -100,14 +100,14 @@ export const createUserProfile = async (profile: Partial<UserProfile>): Promise<
     
     console.log('Creating user profile for:', userId);
     
-    // Add timeout to prevent hanging - 5 seconds (faster)
+    // Add timeout to prevent hanging - 8 seconds
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Profile creation timeout. Please check your connection and try again.')), 5000)
+      setTimeout(() => reject(new Error('Profile creation timeout. Please check your connection and try again.')), 8000)
     );
 
-    const insertPromise = supabase
+    const upsertPromise = supabase
       .from('users')
-      .insert({
+      .upsert({
         id: userId,
         username: profile.username?.toLowerCase(),
         display_name: profile.displayName,
@@ -116,16 +116,31 @@ export const createUserProfile = async (profile: Partial<UserProfile>): Promise<
         has_setup_widget: profile.hasSetupWidget || false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      });
+      }, { onConflict: 'id' })
+      .select()
+      .single();
 
-    const { error } = await Promise.race([insertPromise, timeoutPromise]) as any;
+    const { data, error } = await Promise.race([upsertPromise, timeoutPromise]) as any;
 
     if (error) {
       console.error('Supabase insert error:', error);
+      if (error.code === '23505' || error.status === 409) {
+        throw new Error('Username already taken. Try another one.');
+      }
       throw error;
     }
     
     console.log('Profile created successfully');
+    return {
+      uid: data.id,
+      username: data.username,
+      displayName: data.display_name,
+      photoURL: data.photo_url,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      hasSyncedContacts: data.has_synced_contacts,
+      hasSetupWidget: data.has_setup_widget,
+    };
   } catch (error) {
     console.error('Error creating user profile:', error);
     throw error;
